@@ -1,0 +1,321 @@
+---
+title: "nsl49_BTRY_6020_FinalProject"
+author: "Nathan Lewis"
+date: "2025-05-06"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading in the original datasets 
+```{r}
+raw_data1 <- read.csv("test_energy_data.csv")
+raw_data2 <- read.csv("train_energy_data.csv")
+#merging the two datasets, would rather combine it all then make my own training/testing folds
+raw_data <- rbind(raw_data1, raw_data2)
+```
+
+### Basically the exploratory data analysis section 
+## Perusing the original dataset - choosing Energy Consumption as my predicted variable 
+```{r}
+library(corrplot) #library to view correlations, a more detailed description is given where this is used 
+
+
+#Initial output tables 
+head(raw_data)
+#- used print bc it was displaying weird without it 
+print(summary(raw_data))
+
+#Checking for any missing datapoints - printing to verify that it is 0 
+print(colSums(is.na(raw_data)))
+#no missing data points, this was mentioned in Kaggle but needed to verify 
+
+#getting the Histogram of the energy consumption data
+hist(raw_data$Energy.Consumption)
+#appears to be normally distributed centered around 4250 or so 
+
+#boxplot of energy consumption data 
+boxplot(raw_data$Energy.Consumption)
+##does not appear to be any outliers 
+
+## Linearity assessment of the categorical data, looking for outliers 
+boxplot(raw_data$Energy.Consumption ~ raw_data$Building.Type)
+
+boxplot(raw_data$Energy.Consumption ~ raw_data$Day.of.Week)
+
+## Day of week does not appear to make any difference, building type certainly looks to have a different mean but the distributions of each look the same 
+#wanted to check correlation between variables 
+#found an R package "corrplot" on the cran-r website with a quick google search - need to properly cite in citations
+#https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html
+#corrplot(raw_data, method = 'color', order = 'alphabet')
+#originally got an error "The matrix is not in [-1, 1]
+
+#first needed to convert them to numeric, thankfully this is the same as the as.factor logic which I have used previously
+#filtering out the categorical variables to look at correlations 
+raw_data$Square.Footage <- as.numeric(raw_data$Square.Footage)
+raw_data$Number.of.Occupants <- as.numeric(raw_data$Number.of.Occupants)
+raw_data$Appliances.Used <- as.numeric(raw_data$Appliances.Used)
+raw_data_numeric <- raw_data[, c(2, 3, 4, 5, 7)]
+
+#creating the matrix 
+cor_matrix_raw_data <- cor(raw_data_numeric)
+#now that I have the correlation matrix I can view it 
+corrplot(cor_matrix_raw_data, method = 'color', order = 'alphabet')
+#Energy consumption seems moderately correlated with square footage 
+#appears slightly correlated with appliances used and number of occupants
+#does not seem very correlated with average temp 
+##all of the correlations seem low, this should take care of the multicollinearity assumption 
+
+
+
+
+
+
+```
+### Regressions assumption verification 
+
+##Linearity assessment of all numeric predictors vs yield
+```{r}
+##NUMERIC 
+#code adapted from Lab 2 
+plot(raw_data$Square.Footage, raw_data$Energy.Consumption, main = "Untransformed data", xlab = "Square Footage", ylab = "Energy Consumption")
+#seems linear with a decent spread 
+
+plot(raw_data$Number.of.Occupants, raw_data$Energy.Consumption, main = "Untransformed data", xlab = "Number of Occupants", ylab = "Energy Consumption")
+#appears slightly linear with quite a bit of variation 
+
+plot(raw_data$Appliances.Used, raw_data$Energy.Consumption, main = "Untransformed data", xlab = "Appliances Used", ylab = "Energy Consumption")
+#slight generally increasing linear trend but again a lot of variation 
+
+plot(raw_data$Average.Temperature, raw_data$Energy.Consumption, main = "Untransformed data", xlab = "Average Temperature (C)", ylab = "Energy Consumption")
+#potentially a slight downward trend, but appears more like random noise
+```
+
+#multicollinearity - looking at numeric correlations 
+```{r}
+pairs(raw_data_numeric)
+#does not appear to be any collinearity between the predictors, only between predictors and the energy consumption 
+```
+#Homoskedasticity and Normality of Residuals 
+#Looking into the residuals, did a simple linear model with each of the 4 numerics and the 2 categorical variables 
+```{r}
+#code adapted from lab 3 
+## Continous variables 
+# Square footage 
+untransformed_sqft <- lm(Energy.Consumption ~ Square.Footage, data = raw_data)
+summary(untransformed_sqft)
+plot(untransformed_sqft$fitted.values, untransformed_sqft$residuals, main = "Square Footage",
+xlab = "fitted values", ylab = "residuals")
+
+# Number of Occupants  
+untransformed_occupants <- lm(Energy.Consumption ~ Number.of.Occupants, data = raw_data)
+summary(untransformed_occupants)
+plot(untransformed_occupants$fitted.values, untransformed_occupants$residuals, main = "Number of Occupants",
+xlab = "fitted values", ylab = "residuals")
+
+# Appliances used 
+untransformed_appliances <- lm(Energy.Consumption ~ Appliances.Used, data = raw_data)
+summary(untransformed_appliances)
+plot(untransformed_appliances$fitted.values, untransformed_appliances$residuals, main = "Appliances Used",
+xlab = "fitted values", ylab = "residuals")
+
+# Number of Occupants  
+untransformed_temp <- lm(Energy.Consumption ~ Average.Temperature, data = raw_data)
+summary(untransformed_temp)
+plot(untransformed_temp$fitted.values, untransformed_temp$residuals, main = "Average Temperature",
+xlab = "fitted values", ylab = "residuals")
+
+## all of these predictors appear to have homoscedasticity, the residuals are randomly spread and do not show any funnelling 
+
+## Categorical variables 
+# Square footage 
+untransformed_day <- lm(Energy.Consumption ~ Day.of.Week, data = raw_data)
+summary(untransformed_day)
+plot(untransformed_day$fitted.values, untransformed_day$residuals, main = "Day of Week",
+xlab = "fitted values", ylab = "residuals")
+
+# Number of Occupants  
+untransformed_type <- lm(Energy.Consumption ~ Building.Type, data = raw_data)
+summary(untransformed_type)
+plot(untransformed_type$fitted.values, untransformed_type$residuals, main = "Building Type",
+xlab = "fitted values", ylab = "residuals")
+
+#residuals appear to be the same for all three levels of the building type and both levels for the day of the week 
+
+# Homoskedasticity assumption is good, now to check normality of residuals 
+qqnorm(untransformed_sqft$residuals)
+qqline(untransformed_sqft$residuals)
+
+qqnorm(untransformed_occupants$residuals)
+qqline(untransformed_occupants$residuals)
+
+qqnorm(untransformed_temp$residuals)
+qqline(untransformed_temp$residuals)
+
+qqnorm(untransformed_appliances$residuals)
+qqline(untransformed_appliances$residuals)
+
+qqnorm(untransformed_day$residuals)
+qqline(untransformed_day$residuals)
+
+qqnorm(untransformed_type$residuals)
+qqline(untransformed_type$residuals)
+
+## All six of these do not seem to fit the normality of residuals assumption 
+## However, n in this case is large (1100 >>> 30), so by Central Limit theorem I should be okay 
+
+
+# Day of Week and Temperature are not significant, all other ones are significant 
+```
+## Independence of observations - no way to know with this dataset, could potentially be the same buildings sampled multi times 
+
+### Assumption violation handling - only one violated is normality of residuals, this should be okay via the Central Limit Theorem since n >> 30 
+
+### Variable Selection 1 - Forward Selection 
+## Going to use the BIC rather than AIC since n is large (1000 after splitting)
+### While I initially used BIC over AIC to prevent overfitting, I could not figure out how to run BIC on the Cross Validation approach within cv.glm, for this reason, I decided to go back and use AIC rather than BIC so that it was the same for both model approaches 
+
+Forward Selection BIC approach - did not end up using 
+```{r}
+library("boot")
+#code adapted from lab 8 & 9 
+set.seed(999)
+
+#Forward selection
+#reading in the length of rows in the dataset with nrow 
+#tried length() at first but gave number of columns 
+n <- nrow(raw_data)
+
+##smallest model
+interceptonly <- lm(Energy.Consumption ~ 1, data = raw_data)
+##largest model 
+largest <- lm(Energy.Consumption ~ ., data = raw_data)
+#since I am using the step function I need to select the smallest AIC, not the largest - not from Lab 9 
+out_forward_bic <- step(object = interceptonly, direction = "forward", scope = formula(largest), trace = T, k = log(n))
+summary(out_forward_bic)
+
+```
+
+Forward Selection - AIC - the same model final model was fit with both AIC and BIC
+```{r}
+library("boot")
+#code adapted from lab 8 & 9 
+set.seed(999)
+
+#Forward selection
+#reading in the length of rows in the dataset with nrow 
+#tried length() at first but gave number of columns 
+n <- nrow(raw_data)
+
+##smallest model
+interceptonly <- glm(Energy.Consumption ~ 1, data = raw_data)
+##largest model 
+largest <- glm(Energy.Consumption ~ ., data = raw_data)
+#since I am using the step function I need to select the smallest AIC, not the largest - not from Lab 9 
+out_forward_aic <- step(object = interceptonly, direction = "forward", scope = formula(largest), trace = T, k = 2)
+summary(out_forward_aic)
+
+#now running cross validation on the chosen model 
+
+error_cv_model_forwardselection <- cv.glm(raw_data, out_forward_aic, K = 11)$delta[1]
+error_cv_model_forwardselection # no error, seems a bit to perfect :(
+
+
+
+```
+Cross Validation based approach to model selection, adding covariates until model performance decreased in CV (no covariates led to a decrease, all were chosen, this was basically a forward selction approach done manually)
+```{r}
+library("boot")
+#code adapted from lab 8 & 9 
+#fitting initial model using only square footage 
+cv_model_1 <- glm(Energy.Consumption ~ Square.Footage, data = raw_data)
+summary(cv_model_1)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_1 <- cv.glm(raw_data, cv_model_1, K = 11)$delta[1]
+#AIC = 17159
+#Error = 347441
+
+# Adding in number of occupants 
+cv_model_2 <- glm(Energy.Consumption ~ Square.Footage + Number.of.Occupants, data = raw_data)
+summary(cv_model_2)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_2 <- cv.glm(raw_data, cv_model_2, K = 11)$delta[1]
+#AIC = 16811
+#Error = 253403.5
+
+
+# Adding in appliances 
+cv_model_3 <- glm(Energy.Consumption ~ Square.Footage + Number.of.Occupants + Appliances.Used, data = raw_data)
+summary(cv_model_3)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_3 <- cv.glm(raw_data, cv_model_3, K = 11)$delta[1]
+#error = 169581.5
+#AIC = 16371, still going down lets keep on adding i guess 
+
+# Adding in building type 
+cv_model_4 <- glm(Energy.Consumption ~ Square.Footage + Number.of.Occupants + Appliances.Used + Building.Type, data = raw_data)
+summary(cv_model_4)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_4 <- cv.glm(raw_data, cv_model_4, K = 11)$delta[1]
+#AIC = 11404, very VERY slight improvement over model 3
+#Error = 1859.5 -MASSIVE IMPROVEMENT!!!! 
+
+# Adding in average temperature 
+cv_model_5 <- glm(Energy.Consumption ~ Square.Footage + Number.of.Occupants + Appliances.Used + Building.Type + Average.Temperature, data = raw_data)
+summary(cv_model_5)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_5 <- cv.glm(raw_data, cv_model_5, K = 11)$delta[1]
+#AIC = 10217
+#Error = 633 
+
+# Adding in average temperature 
+cv_model_6 <- glm(Energy.Consumption ~ Square.Footage + Number.of.Occupants + Appliances.Used + Building.Type + Average.Temperature + Day.of.Week, data = raw_data)
+summary(cv_model_6)
+# K must be capitalized 
+# Chose 11 folds so that each was 100, more for satisfaction than anything (and since the original test day was 100 in length)
+error_cv_model_6 <- cv.glm(raw_data, cv_model_6, K = 11)$delta[1]
+#AIC = -6300
+#Error = 0 - similar to forward selection I found a "perfect" model using all covariates. HMMMMMM I FEEL LIKE THIS DATASET IS TOO PERFECT 
+
+#Printing each of the errors at the end to see whether or not performance increased 
+error_cv_model_1
+error_cv_model_2
+error_cv_model_3
+error_cv_model_4
+error_cv_model_5
+error_cv_model_6
+```
+## Third model since the other 2 ended up being perfect fits with a CV addition and Forward selection based approach, this time I'm only including the predictors that were significant individually, just to see a comparison (the individual signifance is shown in Homoskedasticity and normality of residuals)
+## This excludes Average Temp and day of the week 
+## Also decided to try LOOCV here in addition to the 11 folds as before
+
+```{r}
+#making the model 
+significant_individually_only_model <- glm(Energy.Consumption ~ Building.Type + Square.Footage + Number.of.Occupants + Appliances.Used, data = raw_data)
+#K = 11 model, k fold CV
+error_significant_individually_only_model <- cv.glm(raw_data, significant_individually_only_model, K = 11)$delta[1]
+error_significant_individually_only_model
+#Leave one out CV for practice - only took ~ 5 seconds to run (I have a Ryzen 5800X and NVIDIA GeForce RTX 3080 at home) - very VERY similar, with even less error from LOOCV, which is surprising
+error_LOOCV_significant_individually_only_model <- cv.glm(raw_data, significant_individually_only_model, K = 1100)$delta[1]
+error_LOOCV_significant_individually_only_model
+
+summary(significant_individually_only_model)
+```
+## Computing confidence intervals from each of the 3 models 
+```{r}
+# Forward Selection 
+confint(out_forward_aic)
+# Cross Validation - ended up basically just being forward selection done manually 
+confint(cv_model_6)
+# Only the covariates that were significant individually 
+confint(significant_individually_only_model)
+```
+
+
